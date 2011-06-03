@@ -40,7 +40,6 @@ public class TopPanel extends JPanel {
 		
 		public StopWatch() {
 			super("0.0");
-			assert board.getState() == GameState.UNSTARTED;
 			board.addGameStateHook(new Runnable() {public void run() {update();}});
 		}
 

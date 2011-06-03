@@ -93,15 +93,21 @@ public class Board extends JComponent implements MouseListener,
     }
     
     private final Detector detector = new Detector();
-    
 	public BoundedRangeModel getDetectorModel() {return detector;}
 
 	public GameState getState() {return state;}
     public int getNumMines() {return nMines;}
     public int getNumFlagged() {return nFlagged;}
     public ImgSet getImgSet() {return imgSet;}
-    public void addGameStateHook(Runnable r) {gameStateHooks.add(r);}
-    public void addFlagHook(Runnable r) {flagHooks.add(r);}
+    
+    public void addGameStateHook(Runnable r) {
+    	assert state == UNSTARTED;
+    	gameStateHooks.add(r);
+    }
+    public void addFlagHook(Runnable r) {
+    	assert state == UNSTARTED;
+    	flagHooks.add(r);
+    }
     
     public Board(ImgSet imgSet, int height, int width, int nMines) {
     	this.imgSet = imgSet;
@@ -151,9 +157,8 @@ public class Board extends JComponent implements MouseListener,
     	// Copy the mine arrangement to the board, skipping the click radius.
     	for (int y = 0, i = 0; y < height; y++) {
     		for (int x = 0; x < width; x++) {
-    			if (isAdjacent(openX, openY, x, y))
-    				continue;
-    			mine[y][x] = buf[i++];
+    			if (!isAdjacent(openX, openY, x, y))
+    				mine[y][x] = buf[i++];
     		}
     	}
     }
@@ -162,24 +167,23 @@ public class Board extends JComponent implements MouseListener,
     	this.state = state;
     	for (Runnable r: gameStateHooks) r.run();
     }
+    private void setNumFlagged(int n) {
+    	nFlagged = n;
+    	for (Runnable r: flagHooks) r.run();
+    }
     
     public void restart() {
     	if (state != UNSTARTED) {
-    		nFlagged = 0;
     		nUnopened = width*height-nMines;
     		for (int i = 0; i < width; i++) {
     			for (int j = 0; j < height; j++) {
     				opened[j][i] = mine[j][i] = flagged[j][i] = false;
     			}
     		}
+    		setNumFlagged(0);
 			setState(UNSTARTED);
 			repaint();
     	}
-    }
-
-    public void died() {
-    	setState(DEAD);
-        paintImmediately(0, 0, width, height);
     }
 
     public void repaintCells(int x, int y, int cols, int rows) {
@@ -195,13 +199,54 @@ public class Board extends JComponent implements MouseListener,
     }
 
     public void paintComponent(Graphics g) {
-		paintBase(g);
-		
+    	int s = cellSize;
 		Rectangle b = g.getClip().getBounds();
-		int x1 = b.x / cellSize;
-		int y1 = b.y / cellSize;
-		int x2 = (b.x + b.width - 1) / cellSize;
-		int y2 = (b.y + b.height - 1) / cellSize;
+		int bx = b.x, by = b.y;
+		int bw = b.width, bh = b.height;
+		int x1 = bx / s, y1 = by / s;
+		int x2 = (bx + bw - 1) / s, y2 = (by + bh - 1) / s;
+
+    	g.setColor(gray);
+    	g.fillRect(bx, by, bw, bh);
+
+        g.setColor(white);
+        for (int i = x1; i <= x2; i++)
+        	g.drawLine(i*s+1, 0, i*s+1, height*s-1);
+		g.setColor(darkGray);
+		for (int i = x1; i <= x2; i++)
+		    g.drawLine((i+1)*s-2, 0, (i+1)*s-2, height*s-1);
+
+		g.setColor(white);
+		for (int i = y1; i <= y2; i++)
+		    g.drawLine(0, i*s+1, width*s-1, i*s+1);
+		g.setColor(darkGray);
+		for (int i = y1; i <= y2; i++)
+		    g.drawLine(0, (i+1)*s-2, width*s-1, (i+1)*s-2);
+
+		g.setColor(white);
+		for (int i = x1; i <= x2; i++)
+  	          g.drawLine(i*s, 0, i*s, height*s-1);
+		g.setColor(darkGray);
+		for (int i = x1; i <= x2; i++)
+			g.drawLine((i+1)*s-1, 0, (i+1)*s-1, height*s-1);
+
+		g.setColor(white);
+		for (int i = y1; i <= y2; i++)
+			g.drawLine(0, i*s, width*s-1, i*s);
+		g.setColor(darkGray);
+		for (int i = y1; i <= y2; i++)
+			g.drawLine(0, (i+1)*s-1, width*s-1, (i+1)*s-1);
+
+		/* Draw the diagonals */
+        g.setColor(gray);
+        for (int i = 0, n = width+height-1; i < n; i++) {
+        	boolean b1 = i < height, b2 = i < width;
+        	g.drawLine(
+        			b1 ? 0 : (i-height+1)*s,
+        			b1 ? (i+1)*s-1 : height*s-1,
+        			b2 ? (i+1)*s-1 : width*s-1,
+        			b2 ? 0 : (i-width+1)*s);
+        }
 
 		for (int x = x1; x <= x2; x++) {
 			for (int y = y1; y <= y2; y++) {
@@ -237,59 +282,6 @@ public class Board extends JComponent implements MouseListener,
     	{imgSet.paintMineWrong(this, g, x*cellSize, y*cellSize);}
     private void paintNum(Graphics g, int x, int y, int n)
         {imgSet.paintNum(this, g, x*cellSize, y*cellSize, n);}
-
-    public void paintBase(Graphics g) {
-    	final int s = cellSize;
-
-    	g.setColor(gray);
-        g.fillRect(0, 0, width*s, height*s);
-
-        g.setColor(white);
-        for (int i = 0; i < width; i++)
-		    g.drawLine(i*s+1, 0, i*s+1, height*s-1);
-		g.setColor(darkGray);
-		for (int i = 0; i < width; i++)
-		    g.drawLine((i+1)*s-2, 0, (i+1)*s-2, height*s-1);
-
-		g.setColor(white);
-		for (int i = 0; i < height; i++)
-		    g.drawLine(0, i*s+1, width*s-1, i*s+1);
-		g.setColor(darkGray);
-		for (int i = 0; i < height; i++)
-		    g.drawLine(0, (i+1)*s-2, width*s-1, (i+1)*s-2);
-
-		g.setColor(white);
-		for (int i = 0; i < width; i++)
-  	          g.drawLine(i*s, 0, i*s, height*s-1);
-		g.setColor(darkGray);
-		for (int i = 0; i < width; i++)
-			g.drawLine((i+1)*s-1, 0, (i+1)*s-1, height*s-1);
-
-		g.setColor(white);
-		for (int i = 0; i < height; i++)
-			g.drawLine(0, i*s, width*s-1, i*s);
-		g.setColor(darkGray);
-		for (int i = 0; i < height; i++)
-			g.drawLine(0, (i+1)*s-1, width*s-1, (i+1)*s-1);
-
-		/* Draw the diagonals */
-        g.setColor(gray);
-        for (int i = 0, n = width+height-1; i < n; i++) {
-            int x1, x2, y1, y2;
-            x1 = x2 = y1 = y2 = 0;
-            if (i < height) y1 += (i+1)*s - 1;
-            else {
-                x1 += (i-height+1)*s;
-                y1 += height*s - 1;
-            }
-            if (i < width) x2 += (i+1)*s - 1;
-            else {
-                x2 += width*s - 1;
-                y2 += (i-width+1)*s;
-            }
-            g.drawLine(x1, y1, x2, y2);
-        }
-    }
 
     public void paintDepressed(Graphics g, int x, int y) {
         g.setColor(darkGray);
@@ -393,13 +385,12 @@ public class Board extends JComponent implements MouseListener,
 
         if (!opened[y][x]) {
 	        if (flagged[y][x]) {
-	        	nFlagged--;
 	        	flagged[y][x] = false;
+	        	setNumFlagged(nFlagged-1);
 	        } else {
-	        	nFlagged++;
 	        	flagged[y][x] = true;
+	        	setNumFlagged(nFlagged+1);
 	        }
-	        for (Runnable r: flagHooks) r.run();
 	        repaintCells(x, y, 1, 1);
         }
     }
