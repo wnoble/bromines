@@ -6,6 +6,7 @@ import java.util.Random;
 import java.util.List;
 import java.util.ArrayList;
 
+import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.Dimension;
@@ -19,7 +20,7 @@ import javax.swing.event.ChangeListener;
 import org.cow9.util.Stack;
 import org.cow9.util.ArrayStack;
 
-public class Board extends JComponent implements MouseListener,
+public class Board extends Component implements MouseListener,
 	MouseMotionListener {
 	private GameState state = UNSTARTED;
     private int width, height, nMines, nFlagged, nUnopened, mouseX, mouseY;
@@ -187,7 +188,7 @@ public class Board extends JComponent implements MouseListener,
     }
 
     public void repaintCells(int x, int y, int cols, int rows) {
-       paintImmediately(x*cellSize, y*cellSize, cols*cellSize, rows*cellSize);
+       repaint(x*cellSize, y*cellSize, cols*cellSize, rows*cellSize);
     }
 
     public void repaintSurrounding(int x, int y) {
@@ -198,7 +199,7 @@ public class Board extends JComponent implements MouseListener,
         repaintCells(x1, y1, x2-x1+1, y2-y1+1);
     }
 
-    public void paintComponent(Graphics g) {
+    public void paint(Graphics g) {
     	int s = cellSize;
 		Rectangle b = g.getClip().getBounds();
 		int bx = b.x, by = b.y;

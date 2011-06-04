@@ -30,7 +30,7 @@ public class TopPanel extends JPanel {
 			}
 		});
 	}}
-	
+
 	private class StopWatch extends JLabel {
 		private BigInteger seconds = BigInteger.ZERO;
 		private int deciseconds;
