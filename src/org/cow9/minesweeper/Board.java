@@ -159,26 +159,35 @@ public class Board extends Component {
     		repaintCells(minx, miny, maxx-minx+1, maxy-miny+1);
         }
         
-    	public void repaintSurrounding() {
-    		repaintCells(Math.max(0, x-2), Math.max(0, y-2),
-    				Math.min(width, x+2), Math.min(height, y+2));
+    	public void repaintSurrounding() {repaintBounding(this);}
+    	
+    	public void repaintBounding(Cell other) {
+    		int x1 = Math.max(0, Math.min(x, other.x)-1);
+    		int y1 = Math.max(0, Math.min(y, other.y)-1);
+    		int x2 = Math.min(width-1, Math.max(x, other.x)+1);
+    		int y2 = Math.min(height-1, Math.max(y, other.y)+1);
+    		repaintCells(x1, y1, x2-x1+1, y2-y1+1);
     	}
     	
     	public void sweepClick() {
-    		if (state == ALIVE) {
-	    		if (isOpened() && nNeighborMines() == nNeighborFlags()) open(true);
+    		if (state == UNSTARTED) repaintSurrounding();
+    		else if (state == ALIVE) {
+	    		if (isOpened() &&
+	    				(nNeighborMines() == nNeighborFlags()))
+	    			open(true);
 	    		else repaintSurrounding();
     		}
     	}
     	
     	public void enter() {
     		if (cur != this) {
+    			if (state == UNSTARTED && b1) repaintBounding(cur);
+    			else if (state == ALIVE) {
+    				if (b1) repaintBounding(cur);
+    				else if (!isOpened() && !isFlagged()) detector.start();
+    				else detector.stop();
+    			}
     			cur = this;
-	    		if (state == ALIVE) {
-		    		if (b1) repaintSurrounding();
-		    		else if (!isOpened() && !isFlagged()) detector.start();
-		    		else detector.stop();
-	    		}
     		}
     	}
     	
@@ -244,7 +253,8 @@ public class Board extends Component {
     private Cell nullCell = new Cell((byte)-10, (byte)-10) {
     	public void enter() {
     		detector.stop();
-    		if (state == ALIVE && b1) cur.repaintSurrounding();
+    		if ((state == UNSTARTED || state == ALIVE) && b1)
+    			cur.repaintSurrounding();
     		cur = nullCell;
     	}
     	public void sweepClick() {}
@@ -501,23 +511,25 @@ public class Board extends Component {
 		    if (state == ALIVE || state == UNSTARTED) {
 		    	detector.stop();
 		    	inCanceledSweep = false;
-		    	if (b == MouseEvent.BUTTON3) cur.toggleFlag();
+		    	if (b == MouseEvent.BUTTON3 && !b1) cur.toggleFlag();
 		    	else cur.repaintSurrounding();
 		    }
 		}
 	
 		public void mouseReleased(MouseEvent e) {
-		    boolean sweeping = (state == ALIVE && b1 && b3 && !inCanceledSweep);
+		    boolean sweeping = ((state == UNSTARTED || state == ALIVE) &&
+		    		b1 && b3 && !inCanceledSweep);
 		    boolean oldB1 = b1;
 		    int b = e.getButton();
 		    b1 = (b1 && b != MouseEvent.BUTTON1 && b != MouseEvent.BUTTON2);
 		    b3 = (b3 && b != MouseEvent.BUTTON3 && b != MouseEvent.BUTTON2);
 		    
 		    if (state == ALIVE || state == UNSTARTED) {
-		    	inCanceledSweep = (sweeping && (b1 || b3));
 			    if (sweeping) cur.sweepClick();
 			    else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
 			    	cur.open();
+			    else cur.repaintSurrounding();
+			    inCanceledSweep = (sweeping && (b1 || b3));
 		    }
 		}
 	
