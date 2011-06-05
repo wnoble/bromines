@@ -19,8 +19,7 @@ import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-public class Board extends Component implements MouseListener,
-	MouseMotionListener {
+public class Board extends Component {
 	private GameState state = UNSTARTED;
     private int width, height, nMines, nFlagged, nUnopened;
     private boolean b1, b3, inCanceledSweep;
@@ -338,9 +337,9 @@ public class Board extends Component implements MouseListener,
     	b1 = b3 = inCanceledSweep = false;
     	Point p = getMousePosition();
     	cur = (p == null) ? nullCell : getCellFromPoint(p.x, p.y);
-    	setBackground(gray);
-    	addMouseListener(this);
-    	addMouseMotionListener(this);
+    	MouseHandler mouse = new MouseHandler();
+    	addMouseListener(mouse);
+    	addMouseMotionListener(mouse);
     	setupGame(height, width, nMines);
     }
     
@@ -391,21 +390,19 @@ public class Board extends Component implements MouseListener,
     }
     
     private class OpenStack {
-    	private int[] position = new int[width*height];
+    	private int[][] position = new int[height][width];
     	private Cell[] buf = new Cell[width*height];
     	private int i = 0;
 		public boolean isEmpty() {return i == 0;}
 		public Cell pop() {return buf[--i];}
 		private boolean contains(Cell c) {
-			int index = c.y*width+c.x;
-			int pos = position[index];
+			int pos = position[c.y][c.x];
 			return pos < i && buf[pos] == c;
 		}
 		public void push(Cell c) {
-			int index = c.y*width+c.x;
 			if (!c.isOpened() && !c.isFlagged() && !contains(c)) {
 				buf[i] = c;
-				position[index] = i;
+				position[c.y][c.x] = i;
 				i++;
 			}
 		}
@@ -493,39 +490,42 @@ public class Board extends Component implements MouseListener,
         		c.paint(g);
     }
 
-	public void mousePressed(MouseEvent e) {
-	    int b = e.getButton();
-	    if (b == MouseEvent.BUTTON1) b1 = true;
-	    else if (b == MouseEvent.BUTTON2) b1 = b3 = true;
-	    else if (b == MouseEvent.BUTTON3) b3 = true;
-
-	    if (state == ALIVE || state == UNSTARTED) {
-	    	detector.stop();
-	    	inCanceledSweep = false;
-	    	if (b == MouseEvent.BUTTON3) cur.toggleFlag();
-	    	else cur.repaintSurrounding();
-	    }
-	}
-
-	public void mouseReleased(MouseEvent e) {
-	    boolean sweeping = (state == ALIVE && b1 && b3 && !inCanceledSweep);
-	    boolean oldB1 = b1;
-	    int b = e.getButton();
-	    b1 = (b1 && b != MouseEvent.BUTTON1 && b != MouseEvent.BUTTON2);
-	    b3 = (b3 && b != MouseEvent.BUTTON3 && b != MouseEvent.BUTTON2);
-	    
-	    if (state == ALIVE || state == UNSTARTED) {
-	    	inCanceledSweep = (sweeping && (b1 || b3));
-		    if (sweeping) cur.sweepClick();
-		    else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
-		    	cur.open();
-	    }
-	}
-
-	public void mouseMoved(MouseEvent e)
-	    {getCellFromPoint(e.getX(), e.getY()).enter();}
-	public void mouseEntered(MouseEvent e) {mouseMoved(e);}
-	public void mouseDragged(MouseEvent e) {mouseMoved(e);}
-	public void mouseExited(MouseEvent e) {nullCell.enter();}
-	public void mouseClicked(MouseEvent e) {}
+    private class MouseHandler implements MouseListener,
+    	MouseMotionListener {
+		public void mousePressed(MouseEvent e) {
+		    int b = e.getButton();
+		    if (b == MouseEvent.BUTTON1) b1 = true;
+		    else if (b == MouseEvent.BUTTON2) b1 = b3 = true;
+		    else if (b == MouseEvent.BUTTON3) b3 = true;
+	
+		    if (state == ALIVE || state == UNSTARTED) {
+		    	detector.stop();
+		    	inCanceledSweep = false;
+		    	if (b == MouseEvent.BUTTON3) cur.toggleFlag();
+		    	else cur.repaintSurrounding();
+		    }
+		}
+	
+		public void mouseReleased(MouseEvent e) {
+		    boolean sweeping = (state == ALIVE && b1 && b3 && !inCanceledSweep);
+		    boolean oldB1 = b1;
+		    int b = e.getButton();
+		    b1 = (b1 && b != MouseEvent.BUTTON1 && b != MouseEvent.BUTTON2);
+		    b3 = (b3 && b != MouseEvent.BUTTON3 && b != MouseEvent.BUTTON2);
+		    
+		    if (state == ALIVE || state == UNSTARTED) {
+		    	inCanceledSweep = (sweeping && (b1 || b3));
+			    if (sweeping) cur.sweepClick();
+			    else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
+			    	cur.open();
+		    }
+		}
+	
+		public void mouseMoved(MouseEvent e)
+		    {getCellFromPoint(e.getX(), e.getY()).enter();}
+		public void mouseEntered(MouseEvent e) {mouseMoved(e);}
+		public void mouseDragged(MouseEvent e) {mouseMoved(e);}
+		public void mouseExited(MouseEvent e) {nullCell.enter();}
+		public void mouseClicked(MouseEvent e) {}
+    }
 }
