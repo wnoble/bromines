@@ -177,28 +177,49 @@ public class Board extends Component implements MouseListener,
     	
     	public void paint(Graphics g) {
     		int px = x*cellSize, py = y*cellSize;
-    		if (isOpened()) {
-    			if (isMine()) {
+    		boolean selected = (b1 && !inCanceledSweep &&
+    				(this == cur || (b3 && isAdjacent(cur))));
+    		
+    		switch (flags) {
+    		case 0: /* !mine, !flagged, !open */
+    			if (selected) paintDepression(g);
+    			break;    			
+    		case 1: /* mine, !flagged, !open */
+    			switch (state) {
+    			case UNSTARTED:
+    			case ALIVE:
+    				if (selected) paintDepression(g);
+    				break;
+    			case CLEARED:
+    				imgSet.paintFlag(Board.this, g, px, py);
+    				break;
+    			case DEAD:
     				paintDepression(g);
-    				imgSet.paintMineFatal(Board.this, g, px, py);
-    			} else {
-    				paintDepression(g);
-    				if (nNeighborMines() > 0)
-    					imgSet.paintNum(Board.this, g, px, py, nNeighborMines());
+    				imgSet.paintMine(Board.this, g, px, py);
+    				break;
     			}
-    		} else if (isFlagged()) {
-    			if (state == DEAD && !isMine()) {
+    			break;
+    		case 2: /* Incorrectly flagged */
+    			if (state == DEAD) {
     				paintDepression(g);
     				imgSet.paintMineWrong(Board.this, g, px, py);
     			} else {
     				imgSet.paintFlag(Board.this, g, px, py);
     			}
-    		} else if (state == DEAD && isMine()) {
+    			break;
+    		case 3: /* Correctly flagged */
+    			imgSet.paintFlag(Board.this, g, px, py);
+    			break;
+    		case 4: /* opened && !mine */
     			paintDepression(g);
-    			imgSet.paintMine(Board.this, g, px, py);
-    		} else if (b1 && !inCanceledSweep &&
-    				(this == cur || (b3 && isAdjacent(cur)))) {
+    			int n = nNeighborMines();
+    			if (n > 0) imgSet.paintNum(Board.this, g, px, py, n);
+    			break;
+    		case 5: /* mine && opened */
     			paintDepression(g);
+    			imgSet.paintMineFatal(Board.this, g, px, py);
+    			break;
+    		// 6 and 7 don't exist because you can't open a flagged cell
     		}
     	}
 
@@ -211,7 +232,7 @@ public class Board extends Component implements MouseListener,
     	}
     }
     
-    private Cell nullCell = new Cell((byte)-1, (byte)-1) {
+    private Cell nullCell = new Cell((byte)-10, (byte)-10) {
     	public void enter() {
     		detector.stop();
     		if (state == ALIVE && b1) cur.repaintSurrounding();
