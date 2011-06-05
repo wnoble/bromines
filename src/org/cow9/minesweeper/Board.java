@@ -2,6 +2,7 @@ package org.cow9.minesweeper;
 
 import static org.cow9.minesweeper.GameState.*;
 
+import java.util.Iterator;
 import java.util.Random;
 import java.util.List;
 import java.util.ArrayList;
@@ -37,6 +38,18 @@ public class Board extends Component implements MouseListener,
     	darkGray = new Color(0x80, 0x80, 0x80);
 
     private ImgSet imgSet;
+
+    // Non-reentrant iterator for neighboring cells.
+    private Cell[] neighbors = new Cell[8];
+    private int nRemNeighbors;
+    private Iterable<Cell> neighborIterable = new Iterable<Cell>() {
+    	private Iterator<Cell> it = new Iterator<Cell>() {
+    		public boolean hasNext() {return nRemNeighbors > 0;}
+    		public Cell next() {return neighbors[--nRemNeighbors];}
+    		public void remove() {throw new UnsupportedOperationException();}
+    	};
+    	public Iterator<Cell> iterator() {return it;}
+    };
     
     private class Cell {
     	final byte x, y;
@@ -63,7 +76,7 @@ public class Board extends Component implements MouseListener,
     		if (!isOpened()) {
     			setNumFlagged(nFlagged + 1 - (flags & 2));
     			flags ^= 2;
-    			repaint();
+    			repaintSurrounding();
     		}
     	}
    	 
@@ -74,21 +87,22 @@ public class Board extends Component implements MouseListener,
     	}
     	
     	public Iterable<Cell> getNeighbors() {
-    		ArrayList<Cell> ls = new ArrayList<Cell>(8);
-    		for (int i = 0;;) {
+    		for (int i = 0, j = 0;;) {
     			try {
     				switch (i) {
-    				case 0: ls.add(cells[y-1][x-1]); i++;
-    				case 1: ls.add(cells[y-1][x]); i++;
-    				case 2: ls.add(cells[y-1][x+1]); i++;
-    				case 3: ls.add(cells[y][x-1]); i++;
-    				case 4: ls.add(cells[y][x+1]); i++;
-    				case 5: ls.add(cells[y+1][x-1]); i++;
-    				case 6: ls.add(cells[y+1][x]); i++;
-    				case 7: ls.add(cells[y+1][x+1]); i++;
-    				default: return ls;
+    				case 0: neighbors[j] = cells[y+1][x+1]; i++; j++;
+    				case 1: neighbors[j] = cells[y+1][x]; i++; j++;
+    				case 2: neighbors[j] = cells[y+1][x-1]; i++; j++;
+    				case 3: neighbors[j] = cells[y][x+1]; i++; j++;
+    				case 4: neighbors[j] = cells[y][x-1]; i++; j++;
+    				case 5: neighbors[j] = cells[y-1][x+1]; i++; j++;
+    				case 6: neighbors[j] = cells[y-1][x]; i++; j++; 
+    				case 7: neighbors[j] = cells[y-1][x-1]; i++; j++;
+    				default:
+    					nRemNeighbors = j;
+    					return neighborIterable;
     				}
-    			} catch (IndexOutOfBoundsException e) {
+    			} catch (ArrayIndexOutOfBoundsException e) {
     				i++;
     				continue;
     			}
@@ -230,6 +244,8 @@ public class Board extends Component implements MouseListener,
             g.setColor(gray);
             g.fillRect(x*cellSize+1, y*cellSize+1, cellSize-1, cellSize-1);
     	}
+    	
+    	public String toString() {return "(" + x + ", " + y + ")";}
     }
     
     private Cell nullCell = new Cell((byte)-10, (byte)-10) {
@@ -306,8 +322,13 @@ public class Board extends Component implements MouseListener,
     public int getNumFlagged() {return nFlagged;}
     public ImgSet getImgSet() {return imgSet;}
     
-    private Cell getCellFromPoint(int x, int y)
-        {return cells[(int)(y/cellSize)][(int)(x/cellSize)];}
+    private Cell getCellFromPoint(int x, int y) {
+    	try {
+    		return cells[(int)(y/cellSize)][(int)(x/cellSize)];
+    	} catch (ArrayIndexOutOfBoundsException e) {
+    		return nullCell;
+    	}
+    }
     
     public void addGameStateHook(Runnable r) {
     	assert state == UNSTARTED;
@@ -346,6 +367,9 @@ public class Board extends Component implements MouseListener,
     
     private void placeMines() {
     	int n = width*height-1;
+    	
+    	if (cur == nullCell) throw new RuntimeException();
+    	
     	for (Cell x: cur.getNeighbors()) {
     		n -= (1-x.x+x.x); // shut up javac I don't need x
     	}
@@ -446,9 +470,9 @@ public class Board extends Component implements MouseListener,
         			b2 ? 0 : (i-width+1)*s);
         }
 
-		for (int x = x1; x <= x2; x++)
-			for (int y = y1; y <= y2; y++)
-				cells[y][x].paint(g);
+        for (Cell[] row: cells)
+        	for (Cell c: row)
+        		c.paint(g);
     }
 
 	public void mousePressed(MouseEvent e) {
@@ -471,10 +495,13 @@ public class Board extends Component implements MouseListener,
 	    int b = e.getButton();
 	    b1 = (b1 && b != MouseEvent.BUTTON1 && b != MouseEvent.BUTTON2);
 	    b3 = (b3 && b != MouseEvent.BUTTON3 && b != MouseEvent.BUTTON2);
-	    inCanceledSweep = (sweeping && (b1 || b3));
-	    if (sweeping) cur.sweepClick();
-	    else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
-	    	cur.open();
+	    
+	    if (state == ALIVE || state == UNSTARTED) {
+	    	inCanceledSweep = (sweeping && (b1 || b3));
+		    if (sweeping) cur.sweepClick();
+		    else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
+		    	cur.open();
+	    }
 	}
 
 	public void mouseMoved(MouseEvent e)
