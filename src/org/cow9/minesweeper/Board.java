@@ -19,9 +19,6 @@ import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-import org.cow9.util.Stack;
-import org.cow9.util.ArrayStack;
-
 public class Board extends Component implements MouseListener,
 	MouseMotionListener {
 	private GameState state = UNSTARTED;
@@ -40,16 +37,18 @@ public class Board extends Component implements MouseListener,
     private ImgSet imgSet;
 
     // Non-reentrant iterator for neighboring cells.
-    private Cell[] neighbors = new Cell[8];
-    private int nRemNeighbors;
-    private Iterable<Cell> neighborIterable = new Iterable<Cell>() {
+    private class NeighborIterable implements Iterable<Cell> {
+    	public int rem;
+    	public Cell[] buf = new Cell[8];
     	private Iterator<Cell> it = new Iterator<Cell>() {
-    		public boolean hasNext() {return nRemNeighbors > 0;}
-    		public Cell next() {return neighbors[--nRemNeighbors];}
+    		public boolean hasNext() {return rem > 0;}
+    		public Cell next() {return buf[--rem];}
     		public void remove() {throw new UnsupportedOperationException();}
     	};
     	public Iterator<Cell> iterator() {return it;}
-    };
+    }
+    
+    private NeighborIterable neighborIterable = new NeighborIterable();
     
     private class Cell {
     	final byte x, y;
@@ -90,16 +89,16 @@ public class Board extends Component implements MouseListener,
     		for (int i = 0, j = 0;;) {
     			try {
     				switch (i) {
-    				case 0: neighbors[j] = cells[y+1][x+1]; i++; j++;
-    				case 1: neighbors[j] = cells[y+1][x]; i++; j++;
-    				case 2: neighbors[j] = cells[y+1][x-1]; i++; j++;
-    				case 3: neighbors[j] = cells[y][x+1]; i++; j++;
-    				case 4: neighbors[j] = cells[y][x-1]; i++; j++;
-    				case 5: neighbors[j] = cells[y-1][x+1]; i++; j++;
-    				case 6: neighbors[j] = cells[y-1][x]; i++; j++; 
-    				case 7: neighbors[j] = cells[y-1][x-1]; i++; j++;
+    				case 0: neighborIterable.buf[j] = cells[y+1][x+1]; i++; j++;
+    				case 1: neighborIterable.buf[j] = cells[y+1][x]; i++; j++;
+    				case 2: neighborIterable.buf[j] = cells[y+1][x-1]; i++; j++;
+    				case 3: neighborIterable.buf[j] = cells[y][x+1]; i++; j++;
+    				case 4: neighborIterable.buf[j] = cells[y][x-1]; i++; j++;
+    				case 5: neighborIterable.buf[j] = cells[y-1][x+1]; i++; j++;
+    				case 6: neighborIterable.buf[j] = cells[y-1][x]; i++; j++; 
+    				case 7: neighborIterable.buf[j] = cells[y-1][x-1]; i++; j++;
     				default:
-    					nRemNeighbors = j;
+    					neighborIterable.rem = j;
     					return neighborIterable;
     				}
     			} catch (ArrayIndexOutOfBoundsException e) {
@@ -109,40 +108,35 @@ public class Board extends Component implements MouseListener,
     		}
     	}
     	
-    	public int nNeighborMines() {
+    	private int nNeighborMines() {
     		int n = 0;
     		for (Cell c: getNeighbors()) if (c.isMine()) n++;
     		return n;
     	}
     	
-    	public int nNeighborFlags() {
+    	private int nNeighborFlags() {
     		int n = 0;
     		for (Cell c: getNeighbors()) if (c.isFlagged()) n++;
     		return n;
     	}
     	
-        public boolean isAdjacent(Cell c)
+        private boolean isAdjacent(Cell c)
         	{return (Math.abs(x-c.x) <= 1 && Math.abs(y-c.y) <= 1);}
     	
     	public void open() {open(false);}
-    	public void open(boolean sweep) {
+        private void open(boolean sweep) {
     		if (state == UNSTARTED) {
     			placeMines();
     			setState(ALIVE);
     		}
     		
-    		Stack<Cell> stack = new ArrayStack<Cell>() {
-    			public void push(Cell c) {
-    				if (!c.isOpened() && !c.isFlagged()) super.push(c);
-    			}
-    		};
-    		if (sweep) for (Cell c: getNeighbors()) stack.push(c);
-    		else stack.push(this);
+    		if (sweep) for (Cell c: getNeighbors()) openStack.push(c);
+    		else openStack.push(this);
     		
     		int minx = width-1, miny = height-1, maxx = 0, maxy = 0;
     		
-    		while (!stack.isEmpty()) {
-    			Cell c = stack.pop();
+    		while (!openStack.isEmpty()) {
+    			Cell c = openStack.pop();
     			if (c.isOpened()) continue;
     			c.setOpened(true);
     			if (c.isMine()) {
@@ -160,12 +154,12 @@ public class Board extends Component implements MouseListener,
     			maxy = Math.max(maxy, c.y);
     			
     			if (c.nNeighborMines() == 0)
-    				for (Cell n: c.getNeighbors()) stack.push(n);
+    				for (Cell n: c.getNeighbors()) openStack.push(n);
     		}
     		
     		repaintCells(minx, miny, maxx-minx+1, maxy-miny+1);
-    	}
-    	
+        }
+        
     	public void repaintSurrounding() {
     		repaintCells(Math.max(0, x-2), Math.max(0, y-2),
     				Math.min(width, x+2), Math.min(height, y+2));
@@ -358,6 +352,7 @@ public class Board extends Component implements MouseListener,
         nFlagged = 0;
         nUnopened = width*height - nMines;
         cells = new Cell[height][width];
+        openStack = new OpenStack();
         for (byte i = 0; i < height; i++)
         	for (byte j = 0; j < width; j++)
         		cells[i][j] = new Cell(j, i);
@@ -394,6 +389,29 @@ public class Board extends Component implements MouseListener,
     		}
     	}
     }
+    
+    private class OpenStack {
+    	private int[] position = new int[width*height];
+    	private Cell[] buf = new Cell[width*height];
+    	private int i = 0;
+		public boolean isEmpty() {return i == 0;}
+		public Cell pop() {return buf[--i];}
+		private boolean contains(Cell c) {
+			int index = c.y*width+c.x;
+			int pos = position[index];
+			return pos < i && buf[pos] == c;
+		}
+		public void push(Cell c) {
+			int index = c.y*width+c.x;
+			if (!c.isOpened() && !c.isFlagged() && !contains(c)) {
+				buf[i] = c;
+				position[index] = i;
+				i++;
+			}
+		}
+    };
+    
+    private OpenStack openStack;
     
     private void setState(GameState state) {
     	this.state = state;
