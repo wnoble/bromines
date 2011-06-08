@@ -38,16 +38,16 @@ public class Board extends Component {
     // Non-reentrant iterator for neighboring cells.
     private class NeighborIterable implements Iterable<Cell> {
     	public int rem;
-    	public Cell[] buf = new Cell[8];
+    	public final Cell[] buf = new Cell[8];
     	private Iterator<Cell> it = new Iterator<Cell>() {
     		public boolean hasNext() {return rem > 0;}
     		public Cell next() {return buf[--rem];}
-    		public void remove() {throw new UnsupportedOperationException();}
+    		public void remove() {}
     	};
     	public Iterator<Cell> iterator() {return it;}
     }
     
-    private NeighborIterable neighborIterable = new NeighborIterable();
+    private final NeighborIterable neighborIterable = new NeighborIterable();
     
     private class Cell {
     	final byte x, y;
@@ -85,7 +85,8 @@ public class Board extends Component {
     	}
     	
     	public Iterable<Cell> getNeighbors() {
-    		for (int i = 0, j = 0;;) {
+    		int i = 0, j = 0;
+    		for (;;) {
     			try {
     				switch (i) {
     				case 0: neighborIterable.buf[j] = cells[y+1][x+1]; i++; j++;
@@ -155,8 +156,9 @@ public class Board extends Component {
     			if (c.nNeighborMines() == 0)
     				for (Cell n: c.getNeighbors()) openStack.push(n);
     		}
-    		
-    		repaintCells(minx, miny, maxx-minx+1, maxy-miny+1);
+
+    		if (maxx == 0) repaintSurrounding();
+    		else repaintCells(minx, miny, maxx-minx+1, maxy-miny+1);
         }
         
     	public void repaintSurrounding() {repaintBounding(this);}
@@ -246,8 +248,6 @@ public class Board extends Component {
             g.setColor(gray);
             g.fillRect(x*cellSize+1, y*cellSize+1, cellSize-1, cellSize-1);
     	}
-    	
-    	public String toString() {return "(" + x + ", " + y + ")";}
     }
     
     private Cell nullCell = new Cell((byte)-10, (byte)-10) {
@@ -352,7 +352,7 @@ public class Board extends Component {
     	addMouseMotionListener(mouse);
     	setupGame(height, width, nMines);
     }
-    
+
     private void setupGame(int height, int width, int nMines) {
         this.height = height;
         this.width = width;
@@ -398,7 +398,8 @@ public class Board extends Component {
     		}
     	}
     }
-    
+
+    // To-visit stack implementation based on the no-initialization set.
     private class OpenStack {
     	private int[][] position = new int[height][width];
     	private Cell[] buf = new Cell[width*height];

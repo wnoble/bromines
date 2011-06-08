@@ -1,17 +1,13 @@
 package org.cow9.minesweeper;
 
-import java.awt.Component;
-import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.math.BigInteger;
 
 import javax.swing.BoundedRangeModel;
-import javax.swing.Icon;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
-import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -31,15 +27,13 @@ public class TopPanel extends JPanel {
 		});
 	}}
 
-	private class StopWatch extends JLabel {
-		private BigInteger seconds = BigInteger.ZERO;
-		private int deciseconds;
-		private final Timer timer = new Timer(100, new ActionListener() {
-			public void actionPerformed(ActionEvent ev) {tick();}
+	private class StopWatch extends Counter {
+		private final Timer timer = new Timer(1000, new ActionListener() {
+			public void actionPerformed(ActionEvent ev) {incr();}
 		});
 		
 		public StopWatch() {
-			super("0.0");
+			super(3, 0);
 			board.addGameStateHook(new Runnable() {public void run() {update();}});
 		}
 
@@ -47,9 +41,7 @@ public class TopPanel extends JPanel {
 			switch (board.getState()) {
 			case UNSTARTED:
 				if (timer.isRunning()) timer.stop();
-				seconds = BigInteger.ZERO;
-				deciseconds = 0;
-				setText("0.0");
+				setValue(0);
 				break;
 			case ALIVE:
 				timer.start();
@@ -58,32 +50,14 @@ public class TopPanel extends JPanel {
 				timer.stop();
 			}
 		}
-		
-		private void tick() {
-			if (deciseconds == 9) {
-				seconds = seconds.add(BigInteger.ONE);
-				deciseconds = 0;
-			} else deciseconds++;
-			setText(seconds + "." + deciseconds);
-		}
 	}
 	
-	private class MineCounter extends JLabel {
+	private class MineCounter extends Counter {
 		public MineCounter() {
-			super(board.getNumMines() + "/" + board.getNumMines(),
-					new Icon() {
-						public int getIconHeight() {return 16;}
-						public int getIconWidth() {return 16;}
-						public void paintIcon(Component c, Graphics g, int x,
-								int y) {
-							board.getImgSet().paintMine(c, g, x, y);
-						}
-				
-			}, SwingConstants.CENTER);
+			super(3, board.getNumMines());
 			board.addFlagHook(new Runnable() {
 				public void run() {
-					int nMines = board.getNumMines();
-					setText((nMines - board.getNumFlagged()) + "/" + nMines);
+					setValue(board.getNumMines()-board.getNumFlagged());
 				}
 			});
 		}
@@ -118,6 +92,13 @@ public class TopPanel extends JPanel {
 	
 	public TopPanel(Board board) {
 		this.board = board;
+		add(new JButton("Restart") {{
+			addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					TopPanel.this.board.restart();
+				}
+			});
+		}});
 		add(new Status());
 		add(new StopWatch());
 		add(new MineCounter());
