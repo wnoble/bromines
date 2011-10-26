@@ -41,18 +41,18 @@ public class Counter extends Component {
 		return r;
 	}
 	
-	private int max() {return pw10(size)-1;}
-	private int min() {return -(pw10(size-1)-1);}
+	private int maxValue() {return pw10(size)-1;}
+	private int minValue() {return -(pw10(size-1)-1);}
 	
 	public Counter(int size, int value) {
 		this.size = size;
 		this.value = value;
-		assert size >= 1 && value > min() && value <= max();
+		assert size >= 1 && value > minValue() && value <= maxValue();
 		setPreferredSize(new Dimension((w+2)*size, h+2));
 	}
 
 	public void setValue(int value) {
-		if (value < min() || value > max()) disabled = true;
+		if (value < minValue() || value > maxValue()) disabled = true;
 		else this.value = value;
 		repaint();
 	}

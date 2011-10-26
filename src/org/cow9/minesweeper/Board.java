@@ -370,12 +370,10 @@ public class Board extends Component {
     }
     
     private void placeMines() {
+    	// Count number of squares eligible for mining.
     	int n = width*height-1;
-    	
-    	if (cur == nullCell) throw new RuntimeException();
-    	
     	for (Cell x: cur.getNeighbors()) {
-    		n -= (1-x.x+x.x); // shut up javac I don't need x
+    		n = n - 1 + (x.x-x.x); // shut up javac I don't need x
     	}
 
     	// Create a n-sized boolean buffer, set the first nMines slots to
@@ -454,8 +452,8 @@ public class Board extends Component {
 		int x1 = bx / s, y1 = by / s;
 		int x2 = (bx + bw - 1) / s, y2 = (by + bh - 1) / s;
 
-    	g.setColor(gray);
-    	g.fillRect(bx, by, bw, bh);
+//    	g.setColor(gray);
+//    	g.fillRect(bx, by, bw, bh);
 
         g.setColor(white);
         for (int i = x1; i <= x2; i++)
@@ -496,9 +494,9 @@ public class Board extends Component {
         			b2 ? 0 : (i-width+1)*s);
         }
 
-        for (Cell[] row: cells)
-        	for (Cell c: row)
-        		c.paint(g);
+        for (int y = y1; y <= y2; y++)
+        	for (int x = x1; x <= x2; x++)
+        		cells[y][x].paint(g);
     }
 
     private class MouseHandler implements MouseListener,
