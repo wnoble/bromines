@@ -81,7 +81,7 @@ public class Counter extends Component {
         }
     }
 
-    public void paint(Graphics g) {
+    @Override public void paint(Graphics g) {
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, (w+2)*size, h+2);
         

@@ -44,7 +44,7 @@ public class Board extends Component {
             public Cell next() { return buf[--rem]; }
             public void remove() {}
         };
-        public Iterator<Cell> iterator() { return it; }
+        @Override public Iterator<Cell> iterator() { return it; }
     }
     
     private final NeighborIterable neighborIterable = new NeighborIterable();
@@ -280,19 +280,19 @@ public class Board extends Component {
                 lis.stateChanged(ev);
         }
         
-        public int getValue() { return value; }
-        public int getMinimum() { return 0; }
-        public int getMaximum() { return sweeperDelay; }
-        public int getExtent() { return 0; }
-        public void addChangeListener(ChangeListener lis) { listeners.add(lis); }
-        public void removeChangeListener(ChangeListener lis) { listeners.remove(lis); }
-        public boolean getValueIsAdjusting() { return value == 0; }
-        public void setValue(int value) {}
-        public void setExtent(int extent) {}
-        public void setMinimum(int min) {}
-        public void setMaximum(int max) {}
-        public void setRangeProperties(int v, int e, int min, int max, boolean adj) {}
-        public void setValueIsAdjusting(boolean adj) {}
+        @Override public int getValue() { return value; }
+        @Override public int getMinimum() { return 0; }
+        @Override public int getMaximum() { return sweeperDelay; }
+        @Override public int getExtent() { return 0; }
+        @Override public void addChangeListener(ChangeListener lis) { listeners.add(lis); }
+        @Override public void removeChangeListener(ChangeListener lis) { listeners.remove(lis); }
+        @Override public boolean getValueIsAdjusting() { return value == 0; }
+        @Override public void setValue(int value) {}
+        @Override public void setExtent(int extent) {}
+        @Override public void setMinimum(int min) {}
+        @Override public void setMaximum(int max) {}
+        @Override public void setRangeProperties(int v, int e, int min, int max, boolean adj) {}
+        @Override public void setValueIsAdjusting(boolean adj) {}
         
         public void start() {
             if (timer.isRunning()) {
@@ -439,7 +439,7 @@ public class Board extends Component {
        repaint(x*cellSize, y*cellSize, cols*cellSize, rows*cellSize);
     }
 
-    public void paint(Graphics g) {
+    @Override public void paint(Graphics g) {
         int s = cellSize;
         Rectangle b = g.getClip().getBounds();
         int bx = b.x, by = b.y;
@@ -493,7 +493,7 @@ public class Board extends Component {
 
     private class MouseHandler implements MouseListener,
         MouseMotionListener {
-        public void mousePressed(MouseEvent e) {
+        @Override public void mousePressed(MouseEvent e) {
             int b = e.getButton();
             if (b == MouseEvent.BUTTON1) b1 = true;
             else if (b == MouseEvent.BUTTON2) b1 = b3 = true;
@@ -507,7 +507,7 @@ public class Board extends Component {
             }
         }
     
-        public void mouseReleased(MouseEvent e) {
+        @Override public void mouseReleased(MouseEvent e) {
             boolean sweeping = ((state == UNSTARTED || state == ALIVE) &&
                     b1 && b3 && !inCanceledSweep);
             boolean oldB1 = b1;
@@ -524,11 +524,11 @@ public class Board extends Component {
             }
         }
     
-        public void mouseMoved(MouseEvent e)
+        @Override public void mouseMoved(MouseEvent e)
             { getCellFromPoint(e.getX(), e.getY()).enter(); }
-        public void mouseEntered(MouseEvent e) { mouseMoved(e); }
-        public void mouseDragged(MouseEvent e) { mouseMoved(e); }
-        public void mouseExited(MouseEvent e) { nullCell.enter(); }
-        public void mouseClicked(MouseEvent e) {}
+        @Override public void mouseEntered(MouseEvent e) { mouseMoved(e); }
+        @Override public void mouseDragged(MouseEvent e) { mouseMoved(e); }
+        @Override public void mouseExited(MouseEvent e) { nullCell.enter(); }
+        @Override public void mouseClicked(MouseEvent e) {}
     }
 }
