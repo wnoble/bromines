@@ -21,7 +21,8 @@ import javax.swing.event.ChangeListener;
 
 public class Board extends Component {
     private GameState state = UNSTARTED;
-    private int width, height, nMines, nFlagged, nUnopened;
+    private final int width, height;
+    private int nMines, nFlagged, nUnopened;
     private boolean b1, b3, inCanceledSweep;
     private Cell[][] cells;
     private Cell cur;
@@ -149,7 +150,9 @@ public class Board extends Component {
                 maxy = Math.max(maxy, c.y);
                 
                 if (c.nNeighborMines() == 0)
-                    for (Cell n: c.getNeighbors()) openStack.push(n);
+                	for (Cell n: c.getNeighbors())
+                		if (!c.isOpened() && !c.isFlagged() && !openStack.contains(c))
+                			openStack.push(n);
             }
 
             if (maxx == 0) repaintSurrounding();
@@ -338,28 +341,25 @@ public class Board extends Component {
     }
     
     public Board(ImgSet imgSet, int height, int width, int nMines) {
-        this.imgSet = imgSet;
+    	this.imgSet = imgSet;
+    	this.height = height;
+    	this.width = width;
+    	this.nMines = nMines;
         b1 = b3 = inCanceledSweep = false;
         Point p = getMousePosition();
         cur = (p == null) ? nullCell : getCellFromPoint(p.x, p.y);
         MouseHandler mouse = new MouseHandler();
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
-        setupGame(height, width, nMines);
-    }
-
-    private void setupGame(int height, int width, int nMines) {
-        this.height = height;
-        this.width = width;
         this.nMines = nMines;
-
-        nFlagged = 0;
-        nUnopened = width*height - nMines;
-        cells = new Cell[height][width];
-        openStack = new OpenStack();
-        for (byte i = 0; i < height; i++)
-            for (byte j = 0; j < width; j++)
-                cells[i][j] = new Cell(j, i);
+		
+		nFlagged = 0;
+		nUnopened = width*height - nMines;
+		cells = new Cell[height][width];
+		openStack = new OpenStack();
+		for (byte i = 0; i < height; i++)
+		    for (byte j = 0; j < width; j++)
+		        cells[i][j] = new Cell(j, i);
 
         setPreferredSize(new Dimension(width*cellSize, height*cellSize));
     }
@@ -399,18 +399,16 @@ public class Board extends Component {
         private int i = 0;
         public boolean isEmpty() { return i == 0; }
         public Cell pop() { return buf[--i]; }
-        private boolean contains(Cell c) {
+        public boolean contains(Cell c) {
             int pos = position[c.y][c.x];
             return pos < i && buf[pos] == c;
         }
         public void push(Cell c) {
-            if (!c.isOpened() && !c.isFlagged() && !contains(c)) {
-                buf[i] = c;
-                position[c.y][c.x] = i;
-                i++;
-            }
+        	buf[i] = c;
+        	position[c.y][c.x] = i;
+        	i++;
         }
-    };
+    }
     
     private OpenStack openStack;
     
