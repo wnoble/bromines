@@ -1,11 +1,7 @@
 package org.cow9.minesweeper;
 
-import static org.cow9.minesweeper.GameState.*;
-
 import java.util.Iterator;
 import java.util.Random;
-import java.util.List;
-import java.util.ArrayList;
 
 import java.awt.Component;
 import java.awt.Graphics;
@@ -16,26 +12,90 @@ import java.awt.Color;
 import java.awt.event.*;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 public class Board extends Component {
-    private GameState state = UNSTARTED;
-    private final int width, height;
-    private int nMines, nFlagged, nUnopened;
-    private boolean b1, b3, inCanceledSweep;
-    private Cell[][] cells;
-    private Cell cur;
-    private Random rand = new Random();
-    private List<Runnable> gameStateHooks = new ArrayList<Runnable>(),
-        flagHooks = new ArrayList<Runnable>();
-
+	private enum GameState { UNSTARTED, ALIVE, DEAD, CLEARED }
+	private enum MouseState { UP, SELECTING, SWEEPING }
+    private GameState state = GameState.UNSTARTED;
+    private MouseState mouseState = MouseState.UP;
     private final int cellSize = 16;
-    private Color white = Color.WHITE, gray = new Color(0xc0, 0xc0, 0xc0),
+    private final Color white = Color.WHITE, gray = new Color(0xc0, 0xc0, 0xc0),
         darkGray = new Color(0x80, 0x80, 0x80);
+    private final int width, height, numMines;
+    private int numFlagged, numUnopened;
+    private boolean placedMines;
+    private Cell cur;
+    
+    private final Cell[][] cells;
+    private Random rand = new Random();
+    private final GameObserver gameObserver;
+    private final ImgSet imgSet;
+    private final OpenStack openStack;
+    private final Detector detector = new Detector() {
+    	public void fire() { cur.reveal(); }
+    };
+    private final NeighborIterable neighborIterable = new NeighborIterable();
+    private final MouseHandler mouse;
+    private final MouseObserver mouseObserver = new MouseObserver() {
+		@Override public void exit() { nullCell.enter(); }
+		@Override public void startSelect() { mouseState = MouseState.SELECTING; cur.startSelect(); }
+		@Override public void startSweep() { mouseState = MouseState.SWEEPING; cur.startSweep(); }
+		@Override public void click() { mouseState = MouseState.UP; cur.click(); }
+		@Override public void sweepClick() { mouseState = MouseState.UP; cur.sweepClick(); }
+		@Override public void rightClick() { mouseState = MouseState.UP; cur.rightClick(); }
+		@Override public void move(int x, int y) {
+			Cell c = getCellFromPoint(x, y);
+			if (c != cur) c.enter();
+		}
+		@Override public void selectDrag(int x, int y) {
+			Cell c = getCellFromPoint(x, y);
+			if (c != cur) {
+				Cell old = cur;
+				c.enter();
+				old.repaint();
+				c.repaint();
+			}
+		}
+		@Override public void sweepDrag(int x, int y) {
+			Cell c = getCellFromPoint(x, y);
+			if (c != cur) {
+				Cell old = cur;
+				c.enter();
+				old.repaintBounding(c);
+			}
+		}
+    };
+    private Cell nullCell = new Cell((byte)-10, (byte)-10) {
+    	@Override public void enter() { detector.stop(); cur = this; }
+        @Override public void startSelect() {}
+        @Override public void startSweep() {}
+        @Override public void sweepClick() {}
+        @Override public void click() {}
+        @Override public void rightClick() {}
+        @Override public void paint(Graphics g) {}
+    };
 
-    private ImgSet imgSet;
-
+    public Board(ImgSet imgSet, int height, int width, int numMines, GameObserver gameObserver) {
+    	this.imgSet = imgSet;
+    	this.height = height;
+    	this.width = width;
+    	this.numMines = numMines;
+		cells = new Cell[height][width];
+		openStack = new OpenStack();
+        mouse = new MouseHandler(mouseObserver) {
+        	@Override public void setListeners(MouseListener l, MouseMotionListener m) {
+        		addMouseListener(l);
+        		addMouseMotionListener(m);
+        	}
+        };
+        mouse.install();
+        this.gameObserver = gameObserver; 
+        for (byte i = 0; i < height; i++)
+        	for (byte j = 0; j < width; j++)
+        		cells[i][j] = new Cell(j, i);
+        setPreferredSize(new Dimension(width*cellSize, height*cellSize));
+    }
+    
     // Non-reentrant iterator for neighboring cells.
     private class NeighborIterable implements Iterable<Cell> {
         public int rem;
@@ -48,38 +108,24 @@ public class Board extends Component {
         @Override public Iterator<Cell> iterator() { return it; }
     }
     
-    private final NeighborIterable neighborIterable = new NeighborIterable();
-    
     private class Cell {
-        final byte x, y;
-        byte flags = 0;
+        public final byte x, y;
         public Cell(byte x, byte y) {
             this.x = x;
             this.y = y;
         }
         
-        public void init() { flags = 0; }
-
+        private byte flags;
         public boolean isMine() { return (flags & 1) != 0; }
-        public void toggleMine() { flags ^= 1; }
-        
+        public void setMine() { flags |= 1; }
         public boolean isFlagged() {return (flags & 2) != 0;}
-        public void toggleFlag() {
-            if (state == UNSTARTED) {
-                placeMines();
-                setState(ALIVE);
-            }
-            if (!isOpened()) {
-                setNumFlagged(nFlagged + 1 - (flags & 2));
-                flags ^= 2;
-                repaintSurrounding();
-            }
-        }
-        
+        private void toggleFlagged() { flags ^= 2; }
         public boolean isOpened() { return (flags & 4) != 0; }
-        public void toggleOpened() { flags ^= 4; }
+        public void setOpened() { flags |= 4; }
         
-        public Iterable<Cell> getNeighbors() {
+        public void reset() { flags = 0; }
+        
+        private Iterable<Cell> getNeighbors() {
             int i = 0, j = 0;
             for (;;) {
                 try {
@@ -103,13 +149,13 @@ public class Board extends Component {
             }
         }
         
-        private int nNeighborMines() {
+        private int numNeighborMines() {
             int n = 0;
             for (Cell c: getNeighbors()) if (c.isMine()) n++;
             return n;
         }
         
-        private int nNeighborFlags() {
+        private int numNeighborFlags() {
             int n = 0;
             for (Cell c: getNeighbors()) if (c.isFlagged()) n++;
             return n;
@@ -118,50 +164,70 @@ public class Board extends Component {
         private boolean isAdjacent(Cell c)
             {return (Math.abs(x-c.x) <= 1 && Math.abs(y-c.y) <= 1);}
         
-        public void open() { open(false); }
-        
-        private void open(boolean sweep) {
-            if (state == UNSTARTED) {
-                placeMines();
-                setState(ALIVE);
+        public void reveal() {
+            if (isMine()) rightClick(); else click();
+        }
+        public void startSelect() { repaint(); }
+        public void startSweep() { repaintSurrounding(); }
+        public void click() { if (!isFlagged() && !isOpened()) open(); }
+        public void sweepClick() {
+        	if (isOpened() && numNeighborMines() == numNeighborFlags())
+        		sweepOpen();
+        	else repaintSurrounding();
+        }
+        public void rightClick() {
+            if (state == GameState.UNSTARTED) start();
+            if (!isOpened()) {
+                setNumFlagged(numFlagged + 1 - (flags & 2));
+                toggleFlagged();
+                repaint();
             }
+        }
+        
+        private void open() { openOrSweepOpen(false); }
+        private void sweepOpen() { openOrSweepOpen(true); }
+        public void maybeQueueOpen() {
+        	if (!isOpened() && !isFlagged() && !openStack.contains(this)) {
+        		openStack.push(this);
+        	}
+        }
+        private void openOrSweepOpen(boolean sweep) {
+        	if (state == GameState.UNSTARTED) {
+        		if (!placedMines) placeMines(x, y);
+        		start();
+        	}
             
-            if (sweep) for (Cell c: getNeighbors()) openStack.push(c);
-            else openStack.push(this);
+            openStack.clear();
+            if (sweep) for (Cell c: getNeighbors()) c.maybeQueueOpen();
+            else maybeQueueOpen();
             
             int minx = width-1, miny = height-1, maxx = 0, maxy = 0;
             
             while (!openStack.isEmpty()) {
                 Cell c = openStack.pop();
                 if (c.isOpened()) continue;
-                c.toggleOpened();
-                if (c.isMine()) {
-                    setState(DEAD);
-                    repaint();
-                    return;
-                } else if (--nUnopened == 0) {
-                    setState(CLEARED);
-                    repaint();
-                    return;
-                }
+                c.setOpened();
+                if (c.isMine()) { died(); return; }
+                else if (--numUnopened == 0) { cleared(); return; }
                 minx = Math.min(minx, c.x);
                 miny = Math.min(miny, c.y);
                 maxx = Math.max(maxx, c.x);
                 maxy = Math.max(maxy, c.y);
                 
-                if (c.nNeighborMines() == 0)
+                if (c.numNeighborMines() == 0)
                 	for (Cell n: c.getNeighbors())
-                		if (!c.isOpened() && !c.isFlagged() && !openStack.contains(c))
-                			openStack.push(n);
+                		n.maybeQueueOpen();
             }
 
             if (maxx == 0) repaintSurrounding();
             else repaintCells(minx, miny, maxx-minx+1, maxy-miny+1);
         }
         
-        public void repaintSurrounding() { repaintBounding(this); }
+        private void repaint() { repaintCells(x, y, 1, 1); }
         
-        public void repaintBounding(Cell other) {
+        private void repaintSurrounding() { repaintBounding(this); }
+        
+        private void repaintBounding(Cell other) {
             int x1 = Math.max(0, Math.min(x, other.x)-1);
             int y1 = Math.max(0, Math.min(y, other.y)-1);
             int x2 = Math.min(width-1, Math.max(x, other.x)+1);
@@ -169,32 +235,17 @@ public class Board extends Component {
             repaintCells(x1, y1, x2-x1+1, y2-y1+1);
         }
         
-        public void sweepClick() {
-            if (state == UNSTARTED) repaintSurrounding();
-            else if (state == ALIVE) {
-                if (isOpened() &&
-                        (nNeighborMines() == nNeighborFlags()))
-                    open(true);
-                else repaintSurrounding();
-            }
-        }
-        
         public void enter() {
-            if (cur != this) {
-                if (state == UNSTARTED && b1) repaintBounding(cur);
-                else if (state == ALIVE) {
-                    if (b1) repaintBounding(cur);
-                    else if (!isOpened() && !isFlagged()) detector.start();
-                    else detector.stop();
-                }
-                cur = this;
-            }
+        	if (!isFlagged() && !isOpened()) detector.start();
+        	else detector.stop();
+        	cur = this;
         }
         
         public void paint(Graphics g) {
             int px = x*cellSize, py = y*cellSize;
-            boolean selected = (b1 && !inCanceledSweep &&
-                    (this == cur || (b3 && isAdjacent(cur))));
+            boolean selected =
+            		(mouseState == MouseState.SELECTING && this == cur) ||
+            		(mouseState == MouseState.SWEEPING && isAdjacent(cur));
             
             switch (flags) {
             case 0: /* !mine, !flagged, !open */
@@ -216,7 +267,7 @@ public class Board extends Component {
                 }
                 break;
             case 2: /* Incorrectly flagged */
-                if (state == DEAD) {
+                if (state == GameState.DEAD) {
                     paintDepression(g);
                     imgSet.paintMineWrong(Board.this, g, px, py);
                 } else {
@@ -228,7 +279,7 @@ public class Board extends Component {
                 break;
             case 4: /* opened && !mine */
                 paintDepression(g);
-                int n = nNeighborMines();
+                int n = numNeighborMines();
                 if (n > 0) imgSet.paintNum(Board.this, g, px, py, n);
                 break;
             case 5: /* mine && opened */
@@ -239,7 +290,7 @@ public class Board extends Component {
             }
         }
 
-        public void paintDepression(Graphics g) {
+        private void paintDepression(Graphics g) {
             g.setColor(darkGray);
             g.drawLine(x*cellSize, y*cellSize, x*cellSize, (y+1)*cellSize);
             g.drawLine(x*cellSize, y*cellSize, (x+1)*cellSize, y*cellSize);
@@ -248,79 +299,11 @@ public class Board extends Component {
         }
     }
     
-    private Cell nullCell = new Cell((byte)-10, (byte)-10) {
-        public void enter() {
-            detector.stop();
-            if ((state == UNSTARTED || state == ALIVE) && b1)
-                cur.repaintSurrounding();
-            cur = nullCell;
-        }
-        public void sweepClick() {}
-        public void open() {}
-    };
-
-    private class Detector implements BoundedRangeModel {
-        private final int sweeperDelay = 200;
-        private int value = 0;
-        private List<ChangeListener> listeners =
-            new ArrayList<ChangeListener>();
-        private final ChangeEvent ev = new ChangeEvent(this);
-        
-        private final Timer timer = new Timer(20, new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                value = (value + 1) % sweeperDelay;
-                if (value == 0) {
-                    if (cur.isMine()) cur.toggleFlag();
-                    else cur.open();
-                    timer.stop();
-                }
-                broadcast();
-            }
-        });
-        
-        private void broadcast() {
-            for (ChangeListener lis: listeners)
-                lis.stateChanged(ev);
-        }
-        
-        @Override public int getValue() { return value; }
-        @Override public int getMinimum() { return 0; }
-        @Override public int getMaximum() { return sweeperDelay; }
-        @Override public int getExtent() { return 0; }
-        @Override public void addChangeListener(ChangeListener lis) { listeners.add(lis); }
-        @Override public void removeChangeListener(ChangeListener lis) { listeners.remove(lis); }
-        @Override public boolean getValueIsAdjusting() { return value == 0; }
-        @Override public void setValue(int value) {}
-        @Override public void setExtent(int extent) {}
-        @Override public void setMinimum(int min) {}
-        @Override public void setMaximum(int max) {}
-        @Override public void setRangeProperties(int v, int e, int min, int max, boolean adj) {}
-        @Override public void setValueIsAdjusting(boolean adj) {}
-        
-        public void start() {
-            if (timer.isRunning()) {
-                value = 0;
-                timer.restart();
-                broadcast();
-            } else {
-                timer.start();
-            }
-        }
-        public void stop() {
-            if (timer.isRunning()) {
-                value = 0;
-                timer.stop();
-                broadcast();
-            }
-        }
-    }
-    
-    private final Detector detector = new Detector();
     public BoundedRangeModel getDetectorModel() { return detector; }
 
     public GameState getState() { return state; }
-    public int getNumMines() { return nMines; }
-    public int getNumFlagged() { return nFlagged; }
+    public int getNumMines() { return numMines; }
+    public int getNumFlagged() { return numFlagged; }
     public ImgSet getImgSet() { return imgSet; }
     
     private Cell getCellFromPoint(int x, int y) {
@@ -331,51 +314,30 @@ public class Board extends Component {
         }
     }
     
-    public void addGameStateHook(Runnable r) {
-        assert state == UNSTARTED;
-        gameStateHooks.add(r);
-    }
-    public void addFlagHook(Runnable r) {
-        assert state == UNSTARTED;
-        flagHooks.add(r);
-    }
-    
-    public Board(ImgSet imgSet, int height, int width, int nMines) {
-    	this.imgSet = imgSet;
-    	this.height = height;
-    	this.width = width;
-    	this.nMines = nMines;
-        b1 = b3 = inCanceledSweep = false;
+    public void reset() {
         Point p = getMousePosition();
         cur = (p == null) ? nullCell : getCellFromPoint(p.x, p.y);
-        MouseHandler mouse = new MouseHandler();
-        addMouseListener(mouse);
-        addMouseMotionListener(mouse);
-        this.nMines = nMines;
-		
-		nFlagged = 0;
-		nUnopened = width*height - nMines;
-		cells = new Cell[height][width];
-		openStack = new OpenStack();
+		numUnopened = width*height - numMines;
 		for (byte i = 0; i < height; i++)
-		    for (byte j = 0; j < width; j++)
-		        cells[i][j] = new Cell(j, i);
-
-        setPreferredSize(new Dimension(width*cellSize, height*cellSize));
+			for (byte j = 0; j < width; j++)
+				cells[i][j].reset();
+		placedMines = false;
+		setNumFlagged(0);
+		state = GameState.UNSTARTED;
     }
     
-    private void placeMines() {
-        // Count number of squares eligible for mining.
-        int n = width*height-1;
-        for (Cell x: cur.getNeighbors()) {
-            n = n - 1 + (x.x-x.x);
-        }
+    private void placeMines(int x, int y) {
+    	assert !placedMines;
+        int numSkip = 9;
+        if (x == 0 || x == width-1) numSkip -= 3;
+        if (y == 0 || y == height-1) numSkip -= 3;
+        if (numSkip == 3) numSkip++; // double-count
         
-        // Create a n-sized boolean buffer, set the first nMines slots to
-        // true, and shuffle entire array.
-        boolean[] buf = new boolean[n];
-        for (int i = 0; i < nMines; i++) buf[i] = true;
-        for (int i = n-1; i >= 1; i--) {
+        boolean[] buf = new boolean[width*height - numSkip];
+        
+        // Set the first nMines slots to true and shuffle entire array.
+        for (int i = 0; i < numMines; i++) buf[i] = true;
+        for (int i = buf.length-1; i >= 1; i--) {
             int j = rand.nextInt(i+1);
             boolean tmp = buf[i];
             buf[i] = buf[j];
@@ -383,20 +345,24 @@ public class Board extends Component {
         }
         
         // Copy the mine arrangement to the board, skipping the click radius.
-        for (int y = 0, i = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Cell c = cells[y][x];
-                if (!c.isAdjacent(cur) && buf[i++])
-                    c.toggleMine();
-            }
+        for (int j = 0, i = 0; j < height; j++) {
+        	boolean neary = j == y-1 || j == y || j == y+1;
+        	for (int k = 0; k < width; k++) {
+        		boolean nearx = k == x-1 || k == x || k == x+1;
+        		if (!(neary && nearx) && buf[i++])
+        			cells[j][k].setMine();
+        	}
         }
+        
+        placedMines = true;
     }
 
     // To-visit stack implementation based on the no-initialization set.
     private class OpenStack {
         private int[][] position = new int[height][width];
         private Cell[] buf = new Cell[width*height];
-        private int i = 0;
+        private int i;
+        public void clear() { i = 0; }
         public boolean isEmpty() { return i == 0; }
         public Cell pop() { return buf[--i]; }
         public boolean contains(Cell c) {
@@ -410,27 +376,29 @@ public class Board extends Component {
         }
     }
     
-    private OpenStack openStack;
-    
-    private void setState(GameState state) {
-        this.state = state;
-        for (Runnable r: gameStateHooks) r.run();
+    private void endGame(boolean won) {
+    	state = won ? GameState.CLEARED : GameState.DEAD;
+    	if (won) gameObserver.cleared(); else gameObserver.died();
+    	mouse.disconnect();
+    	repaint();
     }
+    private void cleared() { endGame(true); }
+    private void died() { endGame(false); }
+    private void start() { state = GameState.ALIVE; gameObserver.started(); }
+    
     private void setNumFlagged(int n) {
-        nFlagged = n;
-        for (Runnable r: flagHooks) r.run();
+        numFlagged = n;
+        gameObserver.numFlagged(n);
     }
     
     public void restart() {
-        if (state != UNSTARTED) {
-            nUnopened = width*height-nMines;
-            for (int i = 0; i < width; i++)
-                for (int j = 0; j < height; j++)
-                    cells[j][i].init();
-            setNumFlagged(0);
-            setState(UNSTARTED);
-            repaint();
-        }
+    	boolean wasAlive = state == GameState.ALIVE;
+    	if (state != GameState.UNSTARTED) {
+    		reset();
+    		gameObserver.restarted();
+    		if (!wasAlive) mouse.reconnect();
+    		repaint();
+    	}
     }
 
     public void repaintCells(int x, int y, int cols, int rows) {
@@ -484,49 +452,8 @@ public class Board extends Component {
                     b2 ? 0 : (i-width+1)*s);
         }
 
-        for (int y = y1; y <= y2; y++)
-            for (int x = x1; x <= x2; x++)
-                cells[y][x].paint(g);
-    }
-
-    private class MouseHandler implements MouseListener,
-        MouseMotionListener {
-        @Override public void mousePressed(MouseEvent e) {
-            int b = e.getButton();
-            if (b == MouseEvent.BUTTON1) b1 = true;
-            else if (b == MouseEvent.BUTTON2) b1 = b3 = true;
-            else if (b == MouseEvent.BUTTON3) b3 = true;
-    
-            if (state == ALIVE || state == UNSTARTED) {
-                detector.stop();
-                inCanceledSweep = false;
-                if (b == MouseEvent.BUTTON3 && !b1) cur.toggleFlag();
-                else cur.repaintSurrounding();
-            }
-        }
-    
-        @Override public void mouseReleased(MouseEvent e) {
-            boolean sweeping = ((state == UNSTARTED || state == ALIVE) &&
-                    b1 && b3 && !inCanceledSweep);
-            boolean oldB1 = b1;
-            int b = e.getButton();
-            b1 = (b1 && b != MouseEvent.BUTTON1 && b != MouseEvent.BUTTON2);
-            b3 = (b3 && b != MouseEvent.BUTTON3 && b != MouseEvent.BUTTON2);
-            
-            if (state == ALIVE || state == UNSTARTED) {
-                if (sweeping) cur.sweepClick();
-                else if (oldB1 && b == MouseEvent.BUTTON1 && !inCanceledSweep)
-                    cur.open();
-                else cur.repaintSurrounding();
-                inCanceledSweep = (sweeping && (b1 || b3));
-            }
-        }
-    
-        @Override public void mouseMoved(MouseEvent e)
-            { getCellFromPoint(e.getX(), e.getY()).enter(); }
-        @Override public void mouseEntered(MouseEvent e) { mouseMoved(e); }
-        @Override public void mouseDragged(MouseEvent e) { mouseMoved(e); }
-        @Override public void mouseExited(MouseEvent e) { nullCell.enter(); }
-        @Override public void mouseClicked(MouseEvent e) {}
+      	for (int y = y1; y <= y2; y++)
+       		for (int x = x1; x <= x2; x++)
+       			cells[y][x].paint(g);
     }
 }

@@ -8,45 +8,55 @@ import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
-public class Bromines extends JFrame {
-    private final Board board = new Board(new NativeImgSet(), 16, 30, 99);
-    
-    private Color white = Color.WHITE, gray = new Color(0xc0, 0xc0, 0xc0),
+public class Bromines {
+	private final GameObserver observer = new GameObserver() {
+		@Override public void started() { stopWatch.start(); }
+		@Override public void restarted() { stopWatch.reset(); }
+		@Override public void cleared() { stopWatch.stop(); }
+		@Override public void died() { stopWatch.stop(); }
+		@Override public void numFlagged(int n) { mineCounter.numFlagged(n); }
+	};
+    private Board board = new Board(new NativeImgSet(), 16, 30, 99, observer);
+    private final StopWatch stopWatch = new StopWatch();
+    private final MineCounter mineCounter = new MineCounter();
+    private final Color white = Color.WHITE, gray = new Color(0xc0, 0xc0, 0xc0),
         darkGray = new Color(0x80, 0x80, 0x80);
 
-    public Bromines() {
-        setTitle("Bromines");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    private class TopLevel extends JFrame {
+    	public void setupUI() {
+            setTitle("Bromines");
+            setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        add(new GameContent(), BorderLayout.CENTER);
-        
-        JMenuBar menuBar = new JMenuBar();
-        JMenu gameMenu = new JMenu("Game");
-        menuBar.add(gameMenu);
-        gameMenu.add(new JMenuItem("New"));
-        gameMenu.addSeparator();
-        JMenuItem beg = new JRadioButtonMenuItem("Beginner");
-        gameMenu.add(beg);
-        JMenuItem inter = new JRadioButtonMenuItem("Intermediate");
-        gameMenu.add(inter);
-        JMenuItem expert = new JRadioButtonMenuItem("Expert");
-        gameMenu.add(expert);
-        
-        setJMenuBar(menuBar);
+            add(new GameContent(), BorderLayout.CENTER);
+            
+            JMenuBar menuBar = new JMenuBar();
+            JMenu gameMenu = new JMenu("Game");
+            menuBar.add(gameMenu);
+            gameMenu.add(new JMenuItem("New"));
+            gameMenu.addSeparator();
+            JMenuItem beg = new JRadioButtonMenuItem("Beginner");
+            gameMenu.add(beg);
+            JMenuItem inter = new JRadioButtonMenuItem("Intermediate");
+            gameMenu.add(inter);
+            JMenuItem expert = new JRadioButtonMenuItem("Expert");
+            gameMenu.add(expert);
+            
+            setJMenuBar(menuBar);
 
-        addKeyListener(new KeyListener() {
-            public void keyTyped(KeyEvent e) {}
-            public void keyReleased(KeyEvent e) {}
-            public void keyPressed(KeyEvent e) {
-                switch (e.getKeyCode()) {
-                case KeyEvent.VK_F2: board.restart(); break;
-                case KeyEvent.VK_ESCAPE: System.exit(0); break;
+            addKeyListener(new KeyListener() {
+                public void keyTyped(KeyEvent e) {}
+                public void keyReleased(KeyEvent e) {}
+                public void keyPressed(KeyEvent e) {
+                    switch (e.getKeyCode()) {
+                    case KeyEvent.VK_F2: board.restart(); break;
+                    case KeyEvent.VK_ESCAPE: System.exit(0); break;
+                    }
                 }
-            }
-        });
-
-        pack();
-        setResizable(false);
+            });
+            
+            pack();
+            setResizable(false);
+    	}
     }
     
     private class StopWatch extends Counter {
@@ -54,44 +64,25 @@ public class Bromines extends JFrame {
             public void actionPerformed(ActionEvent ev) { incr(); }
         });
         
-        public StopWatch() {
-            super(3, 0);
-            board.addGameStateHook(new Runnable() { public void run() { update(); } });
+        public StopWatch() { super(3, 0); }
+        public void reset() {
+        	if (timer.isRunning()) timer.stop();
+        	setValue(0);
         }
-
-        private void update() {
-            switch (board.getState()) {
-            case UNSTARTED:
-                if (timer.isRunning()) timer.stop();
-                setValue(0);
-                break;
-            case ALIVE:
-                timer.start();
-                break;
-            default:
-                timer.stop();
-            }
-        }
+        public void start() { timer.start(); }
+        public void stop() { timer.stop(); }
     }
     
     private class MineCounter extends Counter {
-        public MineCounter() {
-            super(3, board.getNumMines());
-            board.addFlagHook(new Runnable() {
-                public void run() {
-                    setValue(board.getNumMines()-board.getNumFlagged());
-                }
-            });
-        }
+        public MineCounter() { super(3, board.getNumMines()); }
+        public void numFlagged(int n) { setValue(board.getNumMines()-n); }
     }
     
     private class GameContent extends JPanel {
         private Dimension d = board.getPreferredSize();
         private int width, height;
-        private StopWatch t = new StopWatch();
-        private MineCounter mc = new MineCounter();
-        private Dimension td = t.getPreferredSize();
-        private Dimension mcd = mc.getPreferredSize();
+        private Dimension td = stopWatch.getPreferredSize();
+        private Dimension mcd = mineCounter.getPreferredSize();
         
         public GameContent() {
             super(null, false);
@@ -101,10 +92,10 @@ public class Bromines extends JFrame {
             add(board);
             board.setBounds(12, 55, d.width, d.height);
             
-            add(t);
-            t.setBounds(width-54, 16, td.width, td.height);
-            add(mc);
-            mc.setBounds(17, 16, mcd.width, mcd.height);
+            add(stopWatch);
+            stopWatch.setBounds(width-54, 16, td.width, td.height);
+            add(mineCounter);
+            mineCounter.setBounds(17, 16, mcd.width, mcd.height);
         }
         
         public void paintComponent(Graphics g) {
@@ -134,11 +125,16 @@ public class Bromines extends JFrame {
         }
     };
     
+    private void run() {
+    	board.reset();
+    	TopLevel topLevel = new TopLevel();
+    	topLevel.setupUI();
+    	topLevel.setVisible(true);
+    }
+    
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
-            public void run() {
-                (new Bromines()).setVisible(true);
-            }
+        	@Override public void run() { (new Bromines()).run(); }
         });
     }
 }
