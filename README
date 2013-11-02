@@ -1,0 +1,5 @@
+Minesweeper clone. Board area should match winmine down to the pixel.
+
+This version includes an actual minesweeper. If you hover over an unopened
+and unflagged square, eventually it will automatically flag itself if it
+contains a mine and open itself if it doesn't. 
