@@ -8,6 +8,4 @@ public interface MouseObserver {
 	void sweepClick();
 	void rightClick();
 	void move(int x, int y);
-	void selectDrag(int x, int y);
-	void sweepDrag(int x, int y);
 }

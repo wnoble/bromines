@@ -54,9 +54,7 @@ public abstract class MouseHandler {
 			}
 		}, new MouseMotionListener() {
 			@Override public void mouseDragged(MouseEvent e) { mouseMoved(e); }
-			@Override public void mouseMoved(MouseEvent e) {
-				cur.moved(e.getX(), e.getY());
-			}
+			@Override public void mouseMoved(MouseEvent e) { cur.moved(e.getX(), e.getY()); }
 		});
 	}
 	
@@ -87,7 +85,6 @@ public abstract class MouseHandler {
 				observer.click();
 			}
 		}
-		@Override public void moved(int x, int y) { observer.selectDrag(x, y); }
 	};
 	
 	private Handler sweeping = new Handler() {
@@ -95,7 +92,6 @@ public abstract class MouseHandler {
 			cur = any() ? postSweep : up;
 			observer.sweepClick();
 		}
-		@Override public void moved(int x, int y) { observer.sweepDrag(x, y); }
 	};
 	
 	private Handler postSweep = new Handler() {

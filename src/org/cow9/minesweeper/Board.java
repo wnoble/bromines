@@ -38,41 +38,20 @@ public class Board extends Component {
     private final MouseHandler mouse;
     private final MouseObserver mouseObserver = new MouseObserver() {
 		@Override public void exit() { nullCell.enter(); }
-		@Override public void startSelect() { mouseState = MouseState.SELECTING; cur.startSelect(); }
-		@Override public void startSweep() { mouseState = MouseState.SWEEPING; cur.startSweep(); }
+		@Override public void startSelect() { mouseState = MouseState.SELECTING; cur.repaint(); }
+		@Override public void startSweep() { mouseState = MouseState.SWEEPING; cur.repaintSurrounding(); }
 		@Override public void click() { mouseState = MouseState.UP; cur.click(); }
 		@Override public void sweepClick() { mouseState = MouseState.UP; cur.sweepClick(); }
 		@Override public void rightClick() { mouseState = MouseState.UP; cur.rightClick(); }
-		@Override public void move(int x, int y) {
-			Cell c = getCellFromPoint(x, y);
-			if (c != cur) c.enter();
-		}
-		@Override public void selectDrag(int x, int y) {
-			Cell c = getCellFromPoint(x, y);
-			if (c != cur) {
-				Cell old = cur;
-				c.enter();
-				old.repaint();
-				c.repaint();
-			}
-		}
-		@Override public void sweepDrag(int x, int y) {
-			Cell c = getCellFromPoint(x, y);
-			if (c != cur) {
-				Cell old = cur;
-				c.enter();
-				old.repaintBounding(c);
-			}
-		}
+		@Override public void move(int x, int y) { getCellFromPoint(x, y).enter(); }
     };
-    private Cell nullCell = new Cell((byte)-10, (byte)-10) {
-    	@Override public void enter() { detector.stop(); cur = this; }
-        @Override public void startSelect() {}
-        @Override public void startSweep() {}
+    private Cell nullCell = new Cell((byte)-1, (byte)-1) {
+    	@Override public boolean isOpened() { return true; }
         @Override public void sweepClick() {}
         @Override public void click() {}
         @Override public void rightClick() {}
         @Override public void paint(Graphics g) {}
+        @Override public void repaintBounding(Cell c) { c.repaintSurrounding(); }
     };
 
     public Board(ImgSet imgSet, int height, int width, int numMines, GameObserver gameObserver) {
@@ -167,8 +146,6 @@ public class Board extends Component {
         public void reveal() {
             if (isMine()) rightClick(); else click();
         }
-        public void startSelect() { repaint(); }
-        public void startSweep() { repaintSurrounding(); }
         public void click() { if (!isFlagged() && !isOpened()) open(); }
         public void sweepClick() {
         	if (isOpened() && numNeighborMines() == numNeighborFlags())
@@ -227,7 +204,7 @@ public class Board extends Component {
         
         private void repaintSurrounding() { repaintBounding(this); }
         
-        private void repaintBounding(Cell other) {
+        public void repaintBounding(Cell other) {
             int x1 = Math.max(0, Math.min(x, other.x)-1);
             int y1 = Math.max(0, Math.min(y, other.y)-1);
             int x2 = Math.min(width-1, Math.max(x, other.x)+1);
@@ -236,9 +213,13 @@ public class Board extends Component {
         }
         
         public void enter() {
-        	if (!isFlagged() && !isOpened()) detector.start();
-        	else detector.stop();
-        	cur = this;
+        	if (this != cur) {
+        		Cell old = cur;
+        		if (!isFlagged() && !isOpened()) detector.start();
+        		else detector.stop();
+        		cur = this;
+        		repaintBounding(old);
+        	}
         }
         
         public void paint(Graphics g) {
