@@ -51,6 +51,7 @@ public class Board extends Component {
         @Override public void click() {}
         @Override public void rightClick() {}
         @Override public void paint(Graphics g) {}
+        @Override public void repaintSurrounding() {}
         @Override public void repaintBounding(Cell c) { c.repaintSurrounding(); }
     };
 
@@ -202,7 +203,7 @@ public class Board extends Component {
         
         private void repaint() { repaintCells(x, y, 1, 1); }
         
-        private void repaintSurrounding() { repaintBounding(this); }
+        public void repaintSurrounding() { repaintBounding(this); }
         
         public void repaintBounding(Cell other) {
             int x1 = Math.max(0, Math.min(x, other.x)-1);
